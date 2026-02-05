@@ -2,7 +2,7 @@ name: Migrate Garmin CN to Garmin Global
 
 on:
   schedule:
-    - cron: "*/15 * * * *" 
+    - cron: '*/15 * * * *' # 每15分钟运行一次
   workflow_dispatch:      # 允许手动点击运行
 
 env:
@@ -30,23 +30,44 @@ jobs:
       - run: yarn
       - run: yarn migrate_garmin_cn_to_global
 
-      - name: Update Progress Variable
+      - name: Update Progress and Auto Stop
         if: success()
         run: |
           # 1. 计算
           NEXT_START=$((GARMIN_MIGRATE_START + GARMIN_MIGRATE_NUM))
-          echo "Calculated NEXT_START: $NEXT_START"
+          echo "Next start will be: $NEXT_START"
 
-          # 2. 调用 API (增加 Content-Type 声明)
+          # 2. 更新变量 (使用 PAT 确保权限)
           curl -L \
             -X PATCH \
             -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Authorization: Bearer ${{ secrets.MY_PAT }}" \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{ github.repository }}/actions/variables/GARMIN_MIGRATE_START \
             -d "{\"name\":\"GARMIN_MIGRATE_START\",\"value\":\"$NEXT_START\"}"
+
+          # 3. 自动停止 (使用更稳健的 GITHUB_WORKFLOW 引用方式)
+          if [ $NEXT_START -ge 7000 ]; then
+            echo "Reached 7000, disabling workflow..."
+            # 注意：这里 URL 中的脚本名需要进行 URL 编码，或者直接使用 workflow 文件的基本名称
+            # 使用 GitHub 的 API 搜索当前 workflow 文件并禁用
+            WORKFLOW_FILE=$(basename "${{ github.event_path }}") # 获取当前运行的文件名
             
+            curl -L \
+              -X PUT \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ secrets.MY_PAT }}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$(basename ${{ github.workflow }}).yml/disable" || \
+            curl -L \
+              -X PUT \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ secrets.MY_PAT }}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$(echo '${{ github.workflow }}' | sed 's/ /%20/g').yml/disable"
+          fi
+
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Save Garmin Session
