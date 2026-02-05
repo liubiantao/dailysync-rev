@@ -2,7 +2,7 @@ name: Migrate Garmin CN to Garmin Global
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # 每30分钟运行一次
+    - cron: '*/15 * * * *' 
   workflow_dispatch:      # 允许手动点击运行
 
 env:
@@ -34,13 +34,19 @@ jobs:
         if: success()
         run: |
           NEXT_START=$((GARMIN_MIGRATE_START + GARMIN_MIGRATE_NUM))
+          echo "Calculated NEXT_START: $NEXT_START"
+          echo "Debug: CURRENT_START is $GARMIN_MIGRATE_START"
+          echo "Debug: Repository is ${{ github.repository }}"
+          # 2. 调用 API (严格遵循文档格式)
+          # 注意：value 必须包裹在双引号内作为字符串传输
           curl -L \
             -X PATCH \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ github.token }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{ github.repository }}/actions/variables/GARMIN_MIGRATE_START \
-            -d "{\"name\":\"GARMIN_MIGRATE_START\",\"value\":\"$NEXT_START\"}"
+            -d "{\"name\":\"GARMIN_MIGRATE_START\",\"value\":\"$NEXT_START\"}" \
+            -v
             
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
