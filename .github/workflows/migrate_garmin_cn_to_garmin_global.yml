@@ -1,7 +1,9 @@
 name: Migrate Garmin CN to Garmin Global
 
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *' # 每30分钟运行一次
+  workflow_dispatch:      # 允许手动点击运行
 
 env:
   BARK_KEY: ${{ secrets.BARK_KEY }}
@@ -9,8 +11,8 @@ env:
   GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
   GARMIN_GLOBAL_USERNAME: ${{ secrets.GARMIN_GLOBAL_USERNAME }}
   GARMIN_GLOBAL_PASSWORD: ${{ secrets.GARMIN_GLOBAL_PASSWORD }}
-  GARMIN_MIGRATE_NUM: ${{ secrets.GARMIN_MIGRATE_NUM }}
-  GARMIN_MIGRATE_START: ${{ secrets.GARMIN_MIGRATE_START }}
+  GARMIN_MIGRATE_NUM: 100
+  GARMIN_MIGRATE_START: ${{ vars.GARMIN_MIGRATE_START }}
 
 jobs:
   build:
@@ -18,6 +20,7 @@ jobs:
     name: Migrate Garmin CN to Garmin Global
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
@@ -26,6 +29,19 @@ jobs:
           cache: 'yarn'
       - run: yarn
       - run: yarn migrate_garmin_cn_to_global
+
+      - name: Update Progress Variable
+        if: success()
+        run: |
+          NEXT_START=$((GARMIN_MIGRATE_START + GARMIN_MIGRATE_NUM))
+          curl -L \
+            -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/actions/variables/GARMIN_MIGRATE_START \
+            -d "{\"name\":\"GARMIN_MIGRATE_START\",\"value\":\"$NEXT_START\"}"
+            
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Save Garmin Session
